@@ -1,289 +1,352 @@
-const pages = ["overview", "decision", "feedback", "fairness"];
-const pageTitles = {
-  overview: "Overview",
-  decision: "Decision studio",
-  feedback: "Feedback loop",
-  fairness: "Fairness audit",
-};
+const Analysis = window.ClearpathAnalysis;
+const MAX_ROWS = 20_000;
+const PREVIEW_ROWS = 100;
+const MAPPING_FIELDS = [
+  { key: "applicant", label: "Applicant / case reference", required: false },
+  { key: "income", label: "Monthly net income", required: true },
+  { key: "obligations", label: "Existing monthly obligations", required: true },
+  { key: "amount", label: "Requested principal", required: true },
+  { key: "balance", label: "Average account balance", required: false },
+  { key: "rate", label: "Annual rate (%)", required: false },
+  { key: "term", label: "Term (months)", required: false },
+];
 
-let latestProfile = null;
-let latestOutcome = null;
-let overviewData = null;
+let sheet = null;
+let reviewedRows = [];
+let currentFilename = "";
 
-const money = (value) => new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-}).format(value);
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+}[character]));
 
-const percent = (value) => `${Math.round(value * 100)}%`;
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "The request could not be completed.");
-  return body;
-}
+const readOptions = () => ({
+  rate: document.querySelector("#default-rate").value,
+  term: document.querySelector("#default-term").value,
+  ceiling: document.querySelector("#review-ceiling").value,
+});
 
 function showToast(message) {
   const toast = document.querySelector("#toast");
   toast.textContent = message;
   toast.classList.add("show");
-  window.clearTimeout(showToast.timeout);
-  showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 2800);
+  clearTimeout(showToast.timeout);
+  showToast.timeout = setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
 function setView(name) {
-  if (!pages.includes(name)) return;
   document.querySelectorAll(".view-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === `view-${name}`);
   });
   document.querySelectorAll(".nav-link").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === name);
   });
-  document.querySelector("#current-crumb").textContent = pageTitles[name];
-  if (name === "fairness" && overviewData) renderFairness(overviewData);
-  if (name === "feedback" && overviewData) renderFeedback(overviewData);
+  document.querySelector("#current-crumb").textContent = ({
+    workspace: "Sheet workspace",
+    review: "Cash-flow review",
+    fairness: "Decision audit",
+  })[name];
+  if (name === "review" && sheet) renderReview();
+  if (name === "fairness" && sheet) renderFairness();
 }
 
-function renderPerformance(rows) {
-  const chart = document.querySelector("#performance-chart");
-  const width = 620;
-  const height = 142;
-  const left = 31;
-  const right = 10;
-  const top = 7;
-  const bottom = 8;
-  const plotHeight = height - top - bottom;
-  const plotWidth = width - left - right;
-  const groupWidth = plotWidth / rows.length;
-  const barWidth = 28;
-  const yLabels = [100, 75, 50, 25, 0];
-  const grid = yLabels.map((label) => {
-    const y = top + (100 - label) / 100 * plotHeight;
-    return `<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" stroke="#edf0ed" stroke-dasharray="3 4"/><text x="0" y="${y + 3}" fill="#a4aaa6" font-size="8">${label}%</text>`;
-  }).join("");
-  const bars = rows.map((row, index) => {
-    const x = left + groupWidth * index + (groupWidth - barWidth) / 2;
-    let y = top + plotHeight;
-    return [["onTime", "#42b49e"], ["late", "#efb44e"], ["default", "#ed8278"]].map(([key, color]) => {
-      const barHeight = row[key] / 100 * plotHeight;
-      y -= barHeight;
-      return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="2" fill="${color}"><title>${row.month}: ${row[key]}% ${key === "onTime" ? "on time" : key}</title></rect>`;
-    }).join("");
-  }).join("");
-  chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Monthly repayment outcome percentages">${grid}${bars}</svg>`;
-}
-
-function renderFairnessPreview(data) {
-  const root = document.querySelector("#fairness-preview");
-  root.innerHTML = data.fairness.groups.map((group) => `
-    <div>
-      <div class="mini-group-heading"><span>${group.group}</span><strong>${percent(group.approvalRate)}</strong></div>
-      <div class="mini-track"><span style="width:${Math.max(3, group.approvalRate * 100)}%"></span></div>
-    </div>
-  `).join("");
-}
-
-function renderAuditGroups(selector, groups) {
-  const root = document.querySelector(selector);
-  const max = Math.max(...groups.map((group) => group.approvalRate), 0.01);
-  root.innerHTML = groups.map((group) => `
-    <div class="audit-group">
-      <span class="audit-group-name">${group.group}</span>
-      <div class="audit-track"><span style="width:${Math.max(2, group.approvalRate * 100)}%"></span></div>
-      <strong class="audit-rate">${percent(group.approvalRate)}</strong>
-      <span class="audit-count">${group.count} profiles</span>
-    </div>
-  `).join("");
-  return max;
-}
-
-function renderFairness(data) {
-  const genderRates = data.fairness.groups.map((group) => group.approvalRate);
-  const highest = Math.max(...genderRates);
-  const lowest = Math.min(...genderRates);
-  const gap = (highest - lowest) * 100;
-  document.querySelector("#fairness-gap").textContent = `${gap.toFixed(1)} pp`;
-  document.querySelector("#parity-ratio").textContent = `${Math.round((highest > 0 ? lowest / highest : 1) * 100)}%`;
-  document.querySelector("#audited-count").textContent = data.applicants.toLocaleString();
-  renderAuditGroups("#gender-audit", data.fairness.groups);
-  renderAuditGroups("#age-audit", data.fairness.ageGroups);
-}
-
-function renderFeedback(data) {
-  document.querySelector("#feedback-model-badge").textContent = `MODEL v${data.modelVersion}`;
-  document.querySelector("#feedback-activity-count").textContent =
-    `${data.feedbackCount} ${data.feedbackCount === 1 ? "outcome" : "outcomes"}`;
-  if (latestOutcome) {
-    const ago = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(latestOutcome.createdAt));
-    document.querySelector("#feedback-activity").innerHTML = `
-      <span class="activity-check">✓</span>
-      <div><strong>Model updated to v${data.modelVersion}</strong>
-      <p>One ${latestOutcome.outcome} repayment outcome was added at ${ago}. ${data.feedbackCount} demo outcome${data.feedbackCount === 1 ? "" : "s"} recorded.</p></div>`;
-  } else if (data.feedbackCount > 0) {
-    document.querySelector("#feedback-activity").innerHTML = `
-      <span class="activity-check">✓</span>
-      <div><strong>${data.feedbackCount} repayment outcomes in the loop</strong>
-      <p>The local model is trained on the generated portfolio and recorded demo outcomes.</p></div>`;
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === '"' && text[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"' && field.length === 0) {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n" || character === "\r") {
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+      row.push(field);
+      if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += character;
+    }
   }
+  if (quoted) throw new Error("The CSV has an unclosed quoted field.");
+  row.push(field);
+  if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
+  return rows;
 }
 
-function renderOverview(data) {
-  overviewData = data;
-  document.querySelector("#stat-applicants").textContent = data.applicants.toLocaleString();
-  document.querySelector("#stat-approval").textContent = percent(data.approvalRate);
-  document.querySelector("#stat-loss").textContent = money(data.expectedLoss);
-  document.querySelector("#stat-accuracy").textContent = percent(data.accuracy);
-  document.querySelector("#stat-threshold").textContent = percent(data.threshold);
-  document.querySelector("#stat-model-version").textContent = `Model v${data.modelVersion} · ${data.feedbackCount} feedback`;
-  document.querySelector("#average-risk").textContent = percent(data.averageRisk);
-  document.querySelector("#risk-meter-fill").style.left = `${Math.min(96, data.averageRisk * 100)}%`;
-  document.querySelector("#approved-count").textContent = data.approvals.toLocaleString();
-  document.querySelector("#feedback-count").textContent = data.feedbackCount.toLocaleString();
-  renderPerformance(data.repayment);
-  renderFairnessPreview(data);
-  renderFairness(data);
-  renderFeedback(data);
+function uniqueHeaders(rawHeaders) {
+  const seen = new Map();
+  return rawHeaders.map((raw, index) => {
+    const base = String(raw ?? "").replace(/^\uFEFF/, "").trim() || `Column ${index + 1}`;
+    const count = (seen.get(base) || 0) + 1;
+    seen.set(base, count);
+    return count === 1 ? base : `${base} (${count})`;
+  });
 }
 
-function collectProfile() {
-  const form = document.querySelector("#decision-form");
-  const data = new FormData(form);
-  return {
-    monthlyIncome: Number(data.get("monthlyIncome")),
-    monthlyObligations: Number(data.get("monthlyObligations")),
-    averageBalance: Number(data.get("averageBalance")),
-    requestedAmount: Number(data.get("requestedAmount")),
-    incomeVolatility: Number(data.get("incomeVolatility")),
-    transactionRegularity: Number(data.get("transactionRegularity")),
-    savingsMonths: Number(data.get("savingsMonths")),
-    bouncedPayments: Number(data.get("bouncedPayments")),
-    gender: "Women",
-    ageBand: "30–44",
-  };
+function convertRows(matrix) {
+  if (!matrix.length) throw new Error("The selected sheet is empty.");
+  const headers = uniqueHeaders(matrix[0]);
+  const rows = matrix.slice(1).map((cells) => Object.fromEntries(
+    headers.map((header, index) => [header, cells[index] instanceof Date ? cells[index].toISOString() : cells[index] ?? ""]),
+  ));
+  const nonempty = rows.filter((row) => Object.values(row).some((value) => String(value).trim() !== ""));
+  if (!nonempty.length) throw new Error("The selected sheet has column headers but no data rows.");
+  if (nonempty.length > MAX_ROWS) throw new Error(`This file has ${nonempty.length.toLocaleString()} rows. The local review limit is ${MAX_ROWS.toLocaleString()}.`);
+  return { headers, rows: nonempty };
 }
 
-function renderDecision(result) {
-  const root = document.querySelector("#decision-results");
-  const score = Math.round(result.probability * 100);
-  const statusClass = result.approved ? "" : "rejected";
-  const circumference = 2 * Math.PI * 42;
-  const dash = circumference * result.probability;
-  const factors = result.explanation.factors.map((factor) => `
-    <div class="factor-row">
-      <span class="factor-name">${factor.label}</span>
-      <span class="factor-value">${factor.value}</span>
-      <span class="factor-direction ${factor.direction === "watch" ? "watch" : ""}">${factor.direction === "watch" ? "Needs attention" : "Supportive"}</span>
-    </div>
-  `).join("");
-  const reasons = result.explanation.reasons.map((reason) => `<div class="reason"><i>!</i><span>${reason}</span></div>`).join("");
-  const actions = result.counterfactuals.length
-    ? result.counterfactuals.map((item, index) => `<div class="action-item"><span>${index + 1}</span><div>${item.action}<br><strong>What-if score: ${item.score}%</strong></div></div>`).join("")
-    : `<div class="no-actions">No single change in the modeled range reaches the demo criteria. Consider a smaller request or a qualified human review. The score is not a promise of approval.</div>`;
+async function readFile(file) {
+  if (file.size > 25 * 1024 * 1024) throw new Error("Files larger than 25 MB are not supported for local review.");
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "csv") return convertRows(parseCsv(await file.text()));
+  if (["xlsx", "xlsm"].includes(extension)) {
+    if (typeof window.readXlsxFile !== "function") throw new Error("The spreadsheet reader did not load. Restart the app and try again.");
+    const workbookSheets = await window.readXlsxFile(file);
+    if (!Array.isArray(workbookSheets) || !workbookSheets[0]?.data) {
+      throw new Error("No readable worksheet was found in this workbook.");
+    }
+    return convertRows(workbookSheets[0].data);
+  }
+  throw new Error("Choose a .csv, .xlsx, or .xlsm file.");
+}
+
+function renderMappings() {
+  const columns = sheet.headers;
+  const fields = MAPPING_FIELDS.map(({ key, label, required }) => {
+    const selected = Analysis.findColumn(columns, key);
+    return `<label class="field"><span>${escapeHtml(label)}${required ? ' <b class="required-mark">Required</b>' : ""}</span>
+      <select data-map="${key}" aria-label="${escapeHtml(label)}">
+        <option value="">${required ? "Select a column" : "Not mapped"}</option>
+        ${columns.map((column) => `<option value="${escapeHtml(column)}" ${selected === column ? "selected" : ""}>${escapeHtml(column)}</option>`).join("")}
+      </select>
+    </label>`;
+  });
+  document.querySelector("#mapping-grid").innerHTML = fields.join("");
+  renderFairnessSelectors();
+}
+
+function selectedMappings() {
+  return Object.fromEntries([...document.querySelectorAll("[data-map]")].map((select) => [select.dataset.map, select.value]));
+}
+
+function renderReview() {
+  if (!sheet) return;
+  const columns = selectedMappings();
+  const options = readOptions();
+  reviewedRows = sheet.rows.map((row, index) => ({
+    row,
+    rowNumber: index + 2,
+    result: Analysis.reviewRecord(row, columns, options),
+  }));
+  const complete = reviewedRows.filter(({ result }) => result.status !== "Incomplete row").length;
+  const within = reviewedRows.filter(({ result }) => result.status === "Within review ceiling").length;
+  const payments = reviewedRows.reduce((total, { result }) => total + (result.payment ?? 0), 0);
+  const hasPayments = reviewedRows.some(({ result }) => result.payment !== null);
+  document.querySelector("#row-count").textContent = reviewedRows.length.toLocaleString();
+  document.querySelector("#incomplete-count").textContent = (reviewedRows.length - complete).toLocaleString();
+  document.querySelector("#within-count").textContent = options.ceiling ? within.toLocaleString() : "—";
+  document.querySelector("#total-payment").textContent = hasPayments ? Analysis.money(payments) : "—";
+  document.querySelector("#table-title").textContent = `${currentFilename} · ${reviewedRows.length.toLocaleString()} rows`;
+  document.querySelector("#file-indicator").textContent = `${currentFilename} · ${reviewedRows.length.toLocaleString()} rows`;
+  renderTable(columns);
+  document.querySelector("#export-button").disabled = false;
+  document.querySelector("#mapping-message").textContent = "Review these mappings; values remain in this browser.";
+}
+
+function statusClass(status) {
+  if (status === "Within review ceiling") return "status-within";
+  if (status === "Above review ceiling" || status === "No monthly surplus") return "status-attention";
+  if (status === "Incomplete row" || status === "Product terms missing") return "status-incomplete";
+  return "status-neutral";
+}
+
+function renderTable(columns) {
+  const displayColumns = sheet.headers.filter((column) => column !== columns.applicant).slice(0, 5);
+  const calculated = [
+    { key: "disposable", label: "Monthly cash remaining" },
+    { key: "payment", label: "Est. installment" },
+    { key: "burden", label: "Installment / cash" },
+    { key: "status", label: "Review signal" },
+    { key: "issues", label: "Why / what-if" },
+  ];
+  document.querySelector("#table-head").innerHTML = [
+    "<th>Applicant / row</th>",
+    ...displayColumns.map((column) => `<th>${escapeHtml(column)}</th>`),
+    ...calculated.map((column) => `<th>${escapeHtml(column.label)}</th>`),
+  ].join("");
+  const visible = reviewedRows.slice(0, PREVIEW_ROWS);
+  document.querySelector("#table-body").innerHTML = visible.map(({ row, rowNumber, result }) => {
+    const values = displayColumns.map((column) => `<td title="${escapeHtml(row[column])}">${escapeHtml(row[column])}</td>`);
+    const disposable = result.disposable === null ? "—" : Analysis.money(result.disposable);
+    const payment = result.payment === null ? "Add terms" : Analysis.money(result.payment);
+    const burden = result.burden === null ? "—" : `${Analysis.money(result.burden * 100)}%`;
+    const explanations = [...result.issues, ...result.scenarios].join(" ");
+    const status = `<span class="status-pill ${statusClass(result.status)}">${escapeHtml(result.status)}</span>`;
+    const id = columns.applicant ? row[columns.applicant] : `Row ${rowNumber}`;
+    return `<tr><td class="record-cell">${escapeHtml(id || `Row ${rowNumber}`)}</td>${values.join("")}
+      <td>${escapeHtml(disposable)}</td><td>${escapeHtml(payment)}</td><td>${escapeHtml(burden)}</td>
+      <td>${status}</td><td class="explanation-cell" title="${escapeHtml(explanations)}">${escapeHtml(explanations || "No exceptions detected in mapped fields.")}</td></tr>`;
+  }).join("");
+  document.querySelector("#table-foot").textContent = reviewedRows.length > PREVIEW_ROWS
+    ? `Showing first ${PREVIEW_ROWS} of ${reviewedRows.length.toLocaleString()} rows. Export includes every row.`
+    : `Showing all ${reviewedRows.length.toLocaleString()} rows.`;
+}
+
+function renderFairnessSelectors() {
+  const options = [`<option value="">Select a column</option>`, ...sheet.headers.map((header) => `<option value="${escapeHtml(header)}">${escapeHtml(header)}</option>`)].join("");
+  const decision = Analysis.findColumn(sheet.headers, "decision");
+  const cohort = Analysis.findColumn(sheet.headers, "cohort");
+  document.querySelector("#historical-column").innerHTML = options;
+  document.querySelector("#cohort-column").innerHTML = options;
+  document.querySelector("#historical-column").value = decision;
+  document.querySelector("#cohort-column").value = cohort;
+  document.querySelector("#fairness-empty").hidden = true;
+  document.querySelector("#fairness-config").hidden = false;
+  renderFairness();
+}
+
+function renderFairness() {
+  if (!sheet) return;
+  const decisionColumn = document.querySelector("#historical-column").value;
+  const cohortColumn = document.querySelector("#cohort-column").value;
+  const root = document.querySelector("#audit-result");
+  if (!decisionColumn || !cohortColumn || decisionColumn === cohortColumn) {
+    root.innerHTML = '<div class="empty-audit">Choose different decision and group columns to compare historical labels.</div>';
+    return;
+  }
+  const groups = Analysis.summarizeGroups(sheet.rows, decisionColumn, cohortColumn);
+  if (!groups.length) {
+    root.innerHTML = '<div class="empty-audit">No recognized approved/declined labels with a group value were found. Check the selected columns and labels.</div>';
+    return;
+  }
+  const highest = Math.max(...groups.map((group) => group.rate));
+  const lowest = Math.min(...groups.map((group) => group.rate));
   root.innerHTML = `
-    <div class="decision-status"><span class="decision-status-label ${statusClass}"><span></span>${result.approved ? "MEETS DEMO CRITERIA" : "DOES NOT MEET DEMO CRITERIA"}</span><span class="model-badge">MODEL v${overviewData?.modelVersion || 1}</span></div>
-    <article class="panel decision-score-card">
-      <div class="score-ring ${statusClass}">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="42"></circle><circle class="progress" cx="50" cy="50" r="42" stroke-dasharray="${dash} ${circumference}"></circle></svg>
-        <div class="score-ring-inner"><strong>${score}</strong><small>READINESS</small></div>
-      </div>
-      <div class="decision-score-copy"><span class="score-kicker">ESTIMATED REPAYMENT READINESS</span><h2>${result.approved ? "Cash flow looks steady." : "There may be a path forward."}</h2><p>${result.approved ? "This synthetic profile meets the illustrative score and payment-burden criteria." : "See which measurable cash-flow changes could meet the demo criteria."}</p></div>
-    </article>
-    <div class="decision-meta">
-      <div class="panel meta-box"><span>Estimated monthly payment</span><strong>${money(result.payment)}</strong></div>
-      <div class="panel meta-box"><span>Payment / disposable income</span><strong>${percent(result.paymentBurden)}</strong></div>
-    </div>
-    <article class="panel explanation-panel"><h3>Why this result</h3><div class="reason-list">${reasons}</div><div class="factor-list">${factors}</div></article>
-    <article class="panel counterfactual-panel"><h3>How to qualify · what-if actions</h3><p>Illustrative single-variable scenarios, not a guarantee or instruction to take on debt.</p><div class="action-list">${actions}</div></article>
-  `;
+    <div class="audit-summary"><div><span>Largest observed approval-rate difference</span><strong>${Analysis.money((highest - lowest) * 100)} pp</strong></div><div><span>Historical records counted</span><strong>${groups.reduce((sum, group) => sum + group.total, 0).toLocaleString()}</strong></div></div>
+    <div class="audit-groups">${groups.map((group) => `<div class="audit-row"><span>${escapeHtml(group.group)}</span><progress class="audit-progress" max="100" value="${group.rate * 100}" aria-label="${escapeHtml(group.group)} historical approval rate"></progress><strong>${Analysis.money(group.rate * 100)}%</strong><small>${group.total} ${group.total === 1 ? "record" : "records"}</small></div>`).join("")}</div>`;
 }
 
-async function loadOverview() {
+function csvCell(value) {
+  let text = value === null || value === undefined ? "" : String(value);
+  if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportCsv() {
+  if (!sheet || !reviewedRows.length) return;
+  const headers = [
+    ...sheet.headers,
+    "Review signal (not a decision)",
+    "Monthly cash remaining",
+    "Estimated monthly installment",
+    "Installment / remaining cash (%)",
+    "Calculation notes",
+    "What-if scenarios (not a promise)",
+  ];
+  const lines = [headers.map(csvCell).join(",")];
+  for (const { row, result } of reviewedRows) {
+    lines.push([
+      ...sheet.headers.map((header) => row[header]),
+      result.status,
+      result.disposable,
+      result.payment,
+      result.burden === null ? null : result.burden * 100,
+      result.issues.join(" "),
+      result.scenarios.join(" "),
+    ].map(csvCell).join(","));
+  }
+  const blob = new Blob(["\uFEFF", lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${currentFilename.replace(/\.[^.]+$/, "")}-review.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast("Reviewed CSV downloaded to your device.");
+}
+
+async function openFile(file) {
+  const error = document.querySelector("#import-error");
+  error.textContent = "";
   try {
-    renderOverview(await api("/api/overview"));
-  } catch (error) {
-    showToast(`Could not load portfolio: ${error.message}`);
+    const parsed = await readFile(file);
+    sheet = parsed;
+    currentFilename = file.name;
+    document.querySelector("#import-panel").classList.add("has-file");
+    document.querySelector("#review-content").hidden = false;
+    document.querySelector("#no-sheet").hidden = true;
+    renderMappings();
+    renderReview();
+    setView("review");
+    showToast(`${parsed.rows.length.toLocaleString()} rows opened locally.`);
+  } catch (issue) {
+    error.textContent = issue.message;
   }
 }
 
-document.querySelectorAll(".nav-link").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.view));
-});
-document.querySelectorAll("[data-open-view]").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.openView));
-});
-document.querySelector("#refresh-button").addEventListener("click", loadOverview);
+function downloadTemplate() {
+  const headers = ["applicant_id", "monthly_income", "monthly_obligations", "requested_amount", "average_balance", "annual_interest_rate", "term_months", "historical_decision", "cohort"];
+  const blob = new Blob([`${headers.map(csvCell).join(",")}\r\n`], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "cash-flow-review-template.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
-document.querySelector("#decision-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const errorNode = document.querySelector("#decision-error");
-  const button = event.currentTarget.querySelector('button[type="submit"]');
-  errorNode.textContent = "";
-  button.disabled = true;
-  button.textContent = "Assessing…";
-  try {
-    latestProfile = collectProfile();
-    const result = await api("/api/decision", {
-      method: "POST",
-      body: JSON.stringify({ profile: latestProfile }),
-    });
-    renderDecision(result);
-    document.querySelector("#feedback-no-profile").style.display = "none";
-    document.querySelector("#feedback-submit").disabled = false;
-    document.querySelector("#feedback-success").textContent = "";
-    showToast("Assessment complete — synthetic demo only.");
-  } catch (error) {
-    errorNode.textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Run assessment';
-  }
+document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+document.querySelectorAll("[data-open-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.openView)));
+document.querySelector("#file-input").addEventListener("change", (event) => {
+  const [file] = event.target.files;
+  if (file) openFile(file);
+  event.target.value = "";
 });
+document.querySelector("#template-button").addEventListener("click", downloadTemplate);
+document.querySelector("#apply-mapping").addEventListener("click", () => {
+  renderReview();
+  showToast("Sheet review updated in this browser.");
+});
+document.querySelector("#export-button").addEventListener("click", exportCsv);
+document.querySelector("#change-file").addEventListener("click", () => setView("workspace"));
+document.querySelector("#historical-column").addEventListener("change", renderFairness);
+document.querySelector("#cohort-column").addEventListener("change", renderFairness);
 
-document.querySelector("#feedback-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!latestProfile) return;
-  const button = document.querySelector("#feedback-submit");
-  const success = document.querySelector("#feedback-success");
-  button.disabled = true;
-  success.textContent = "";
-  try {
-    const outcome = new FormData(event.currentTarget).get("outcome");
-    const result = await api("/api/feedback", {
-      method: "POST",
-      body: JSON.stringify({ profile: latestProfile, outcome }),
-    });
-    latestOutcome = { outcome, createdAt: new Date().toISOString() };
-    await loadOverview();
-    success.textContent = `Outcome saved. Demo model retrained to v${result.modelVersion}.`;
-    showToast(`Repayment recorded · model v${result.modelVersion}`);
-  } catch (error) {
-    success.textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
-});
+for (const input of ["#default-rate", "#default-term", "#review-ceiling"]) {
+  document.querySelector(input).addEventListener("input", () => {
+    if (sheet) renderReview();
+  });
+}
 
-document.querySelector("#reset-profile").addEventListener("click", () => {
-  const form = document.querySelector("#decision-form");
-  form.reset();
-  document.querySelector("#volatility-value").textContent = `${Math.round(Number(form.elements.incomeVolatility.value) * 100)}%`;
-  document.querySelector("#regularity-value").textContent = `${Math.round(Number(form.elements.transactionRegularity.value) * 100)}%`;
-  document.querySelector("#decision-error").textContent = "";
+const dropZone = document.querySelector("#drop-zone");
+for (const eventName of ["dragenter", "dragover"]) {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragging");
+  });
+}
+for (const eventName of ["dragleave", "drop"]) {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("dragging");
+  });
+}
+dropZone.addEventListener("drop", (event) => {
+  const [file] = event.dataTransfer.files;
+  if (file) openFile(file);
 });
-
-document.querySelector('[name="incomeVolatility"]').addEventListener("input", (event) => {
-  document.querySelector("#volatility-value").textContent = `${Math.round(Number(event.target.value) * 100)}%`;
-});
-document.querySelector('[name="transactionRegularity"]').addEventListener("input", (event) => {
-  document.querySelector("#regularity-value").textContent = `${Math.round(Number(event.target.value) * 100)}%`;
-});
-
-loadOverview();
