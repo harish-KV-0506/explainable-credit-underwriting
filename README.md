@@ -6,14 +6,33 @@ The app calculates transparent cash-flow figures from user-mapped columns and us
 
 ## Run locally
 
-Requires Node.js 20 or newer.
+Requires Node.js 20 or newer. After `npm install`, run the local server with:
 
 ```powershell
-npm install
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The server binds to `127.0.0.1` by default. Change the port with `$env:PORT=3001; npm start`. The spreadsheet parser is served locally from the installed package; no third-party spreadsheet service is contacted.
+Open [http://localhost:3000](http://localhost:3000). The server binds to `127.0.0.1` by default. Change the port with `$env:PORT=3001; npm start`.
+
+## Publish to GitHub Pages
+
+The `main` branch automatically builds, tests, and deploys a static site using GitHub Actions. To enable Pages once for this repository, open **Settings → Pages**, choose **GitHub Actions** as the build and deployment source, and save. Or, if you have repository admin access and GitHub CLI installed:
+
+```powershell
+gh api --method POST repos/harish-KV-0506/explainable-credit-underwriting/pages -f build_type=workflow
+```
+
+The public site URL is `https://harish-kv-0506.github.io/explainable-credit-underwriting/`. The build uses relative asset paths for the repository subpath and includes the locally bundled spreadsheet parser.
+
+To verify a Pages build locally:
+
+```powershell
+npm ci
+npm test
+npm run build
+```
+
+The static output is in `dist/`.
 
 Run the automated checks:
 

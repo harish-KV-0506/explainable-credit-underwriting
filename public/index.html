@@ -6,10 +6,11 @@
     <meta name="theme-color" content="#172a35">
     <meta name="description" content="Private, local spreadsheet workspace for cash-flow review and explainable repayment-capacity scenarios.">
     <title>Clearpath · Cash-flow review</title>
-    <link rel="stylesheet" href="/styles.css">
-    <script src="/vendor/read-excel-file.min.js" defer></script>
-    <script src="/analysis.js" defer></script>
-    <script src="/app.js" defer></script>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./vendor/read-excel-file.min.js" defer></script>
+    <script src="./analysis.js" defer></script>
+    <script src="./app.js" defer></script>
   </head>
   <body>
     <div class="app-shell">

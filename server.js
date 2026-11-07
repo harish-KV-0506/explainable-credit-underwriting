@@ -5,7 +5,6 @@ const http = require("node:http");
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_DIR = path.join(__dirname, "public");
-const SPREADSHEET_BUNDLE = path.join(__dirname, "node_modules", "read-excel-file", "bundle", "read-excel-file.min.js");
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -21,11 +20,9 @@ function createServer() {
     }
 
     const pathname = new URL(request.url, `http://${request.headers.host || HOST}`).pathname;
-    const target = pathname === "/vendor/read-excel-file.min.js"
-      ? SPREADSHEET_BUNDLE
-      : path.resolve(PUBLIC_DIR, `.${pathname === "/" ? "/index.html" : pathname}`);
+    const target = path.resolve(PUBLIC_DIR, `.${pathname === "/" ? "/index.html" : pathname}`);
     const isPublicFile = target.startsWith(`${PUBLIC_DIR}${path.sep}`);
-    if (target !== SPREADSHEET_BUNDLE && !isPublicFile) {
+    if (!isPublicFile) {
       response.writeHead(403);
       response.end("Forbidden");
       return;
