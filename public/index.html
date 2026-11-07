@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7f4">
+    <meta name="description" content="A synthetic cash-flow underwriting demo with explainable decisions, what-if guidance, repayment feedback, and fairness monitoring.">
+    <title>Clearpath · Explainable credit</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Clearpath home">
+          <span class="brand-mark"><span></span><span></span><span></span></span>
+          <span class="brand-name">clearpath<span class="brand-dot">.</span></span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-link active" data-view="overview">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/></svg>
+            Overview
+          </button>
+          <button class="nav-link" data-view="decision">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 7v8M7 11h8"/></svg>
+            Decision studio
+          </button>
+          <button class="nav-link" data-view="feedback">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-6a7.5 7.5 0 1 1 17-3.5Z"/><path d="M8 11h8M8 14h5"/></svg>
+            Feedback loop
+          </button>
+          <button class="nav-link" data-view="fairness">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+            Fairness audit
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="privacy-card">
+            <span class="privacy-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3M12 14v3"/></svg></span>
+            <strong>Privacy first</strong>
+            <p>All borrower records are synthetic. No bank connection or personal data.</p>
+          </div>
+          <div class="profile-chip">
+            <div class="avatar">CP</div>
+            <div><strong>Credit team</strong><span>Demo workspace</span></div>
+            <span class="online-dot"></span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong id="current-crumb">Overview</strong></div>
+          <div class="topbar-right">
+            <span class="live-status"><span></span> LIVE DEMO</span>
+            <button class="icon-button" id="refresh-button" aria-label="Refresh dashboard" title="Refresh dashboard">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9a7 7 0 0 1 11.6-2L20 12M4 12l2.9 5a7 7 0 0 0 11.6-2"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="view-panel active" id="view-overview">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> CREDIT INTELLIGENCE</div>
+              <h1>Good morning, team <span class="wave">✳</span></h1>
+              <p class="page-subtitle">A clearer view of your cash-flow portfolio.</p>
+            </div>
+            <button class="button button-primary" data-open-view="decision">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              New assessment
+            </button>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-top"><span>Applicants assessed</span><span class="stat-icon mint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 8v6M23 11h-6"/></svg></span></div>
+              <div class="stat-value" id="stat-applicants">—</div>
+              <div class="stat-foot"><span class="positive-dot"></span> Synthetic applicant histories</div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top"><span>Approval rate</span><span class="stat-icon lavender"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16 6-6 4 4 6-8"/><path d="M14 6h6v6"/></svg></span></div>
+              <div class="stat-value" id="stat-approval">—</div>
+              <div class="stat-foot"><span class="stat-neutral">Demo threshold</span><span id="stat-threshold">—</span></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top"><span>Expected portfolio loss</span><span class="stat-icon peach"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div>
+              <div class="stat-value" id="stat-loss">—</div>
+              <div class="stat-foot"><span class="stat-neutral">Modeled exposure estimate</span></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top"><span>Model accuracy</span><span class="stat-icon blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 14l4-4 4 4 6-7"/></svg></span></div>
+              <div class="stat-value" id="stat-accuracy">—</div>
+              <div class="stat-foot"><span class="positive-dot"></span><span id="stat-model-version">Model v1</span></div>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="panel performance-panel">
+              <div class="panel-heading">
+                <div><h2>Repayment performance</h2><p>Portfolio repayment signals over time</p></div>
+                <span class="select-static">Last 6 months <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span>
+              </div>
+              <div class="legend"><span><i class="legend-dot green"></i> On time</span><span><i class="legend-dot yellow"></i> Late</span><span><i class="legend-dot rose"></i> Default</span></div>
+              <div class="chart-wrap" id="performance-chart" aria-label="Repayment performance chart"></div>
+              <div class="chart-axis"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span></div>
+            </article>
+            <article class="panel portfolio-panel">
+              <div class="panel-heading"><div><h2>Portfolio health</h2><p>Cash-flow risk snapshot</p></div><span class="health-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span></div>
+              <div class="health-score-row"><span class="health-number" id="average-risk">—</span><span class="health-caption">avg. modeled<br>risk score</span></div>
+              <div class="risk-meter"><span id="risk-meter-fill"></span></div>
+              <div class="risk-meter-labels"><span>Lower risk</span><span>Higher risk</span></div>
+              <div class="portfolio-divider"></div>
+              <div class="portfolio-detail"><span>Approved applicants</span><strong id="approved-count">—</strong></div>
+              <div class="portfolio-detail"><span>Repayment feedback</span><strong id="feedback-count">—</strong></div>
+              <button class="text-button" data-open-view="feedback">View feedback loop <span>→</span></button>
+            </article>
+          </div>
+
+          <article class="panel fairness-preview">
+            <div class="panel-heading">
+              <div><h2>Fairness at a glance</h2><p>Approval rates across synthetic demographic cohorts</p></div>
+              <button class="text-button" data-open-view="fairness">Full audit <span>→</span></button>
+            </div>
+            <div id="fairness-preview" class="fairness-preview-grid"></div>
+            <div class="audit-note"><span class="info-circle">i</span> Monitoring only — group differences are a signal for investigation, not proof of bias or fairness.</div>
+          </article>
+          <p class="disclaimer"><strong>Research demo only.</strong> Uses generated data and an illustrative model. Not a credit bureau score, lending recommendation, or substitute for legal, compliance, or model-risk review.</p>
+        </section>
+
+        <section class="view-panel" id="view-decision">
+          <div class="page-heading compact-heading">
+            <div><div class="eyebrow"><span class="eyebrow-line"></span> DECISION STUDIO</div><h1>See the whole story.</h1><p class="page-subtitle">Explore how day-to-day cash flow shapes a demo decision.</p></div>
+            <span class="synthetic-tag"><span></span> SYNTHETIC PROFILE</span>
+          </div>
+          <div class="decision-layout">
+            <article class="panel form-panel">
+              <div class="panel-heading"><div><h2>Borrower cash flow</h2><p>Adjust values to explore a synthetic profile.</p></div><button class="reset-button" id="reset-profile">Reset</button></div>
+              <form id="decision-form">
+                <div class="form-section-label">INCOME & COMMITMENTS</div>
+                <div class="input-grid">
+                  <label class="field"><span>Monthly income <small>USD</small></span><div class="input-wrap"><span>$</span><input name="monthlyIncome" type="number" min="100" step="100" value="3200" required></div></label>
+                  <label class="field"><span>Monthly obligations <small>USD</small></span><div class="input-wrap"><span>$</span><input name="monthlyObligations" type="number" min="0" step="50" value="1250" required></div></label>
+                  <label class="field"><span>Average account balance <small>USD</small></span><div class="input-wrap"><span>$</span><input name="averageBalance" type="number" min="0" step="50" value="950" required></div></label>
+                  <label class="field"><span>Requested amount <small>USD</small></span><div class="input-wrap"><span>$</span><input name="requestedAmount" type="number" min="1000" step="500" value="12000" required></div></label>
+                </div>
+                <div class="form-section-label second-section">CASH-FLOW PATTERNS</div>
+                <label class="range-field"><span><span>Income variation</span><strong id="volatility-value">35%</strong></span><input name="incomeVolatility" type="range" min="0" max="0.9" step="0.01" value="0.35"><small>Lower means more consistent deposits</small></label>
+                <label class="range-field"><span><span>Transaction regularity</span><strong id="regularity-value">72%</strong></span><input name="transactionRegularity" type="range" min="0.1" max="1" step="0.01" value="0.72"><small>Recurring transaction pattern in synthetic history</small></label>
+                <div class="input-grid compact-inputs">
+                  <label class="field"><span>Savings history <small>months</small></span><div class="input-wrap"><input name="savingsMonths" type="number" min="0" step="0.5" value="2"></div></label>
+                  <label class="field"><span>Returned payments <small>count</small></span><div class="input-wrap"><input name="bouncedPayments" type="number" min="0" max="20" step="1" value="1"></div></label>
+                </div>
+                <button class="button button-primary assess-button" type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Run assessment</button>
+                <p class="form-error" id="decision-error" role="alert"></p>
+              </form>
+            </article>
+            <div class="decision-results" id="decision-results">
+              <div class="empty-state panel"><div class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V7M16 15v-6"/></svg></div><h2>Your assessment appears here</h2><p>Adjust a few cash-flow signals, then run an assessment to see the score, explanation, and possible next steps.</p></div>
+            </div>
+          </div>
+          <p class="disclaimer"><strong>Synthetic scenario only.</strong> The result is illustrative and should never be used to approve or deny a real credit application.</p>
+        </section>
+
+        <section class="view-panel" id="view-feedback">
+          <div class="page-heading compact-heading">
+            <div><div class="eyebrow"><span class="eyebrow-line"></span> LEARNING SYSTEM</div><h1>Every outcome teaches us.</h1><p class="page-subtitle">See the feedback loop update the demo model as repayment outcomes arrive.</p></div>
+            <span class="model-badge" id="feedback-model-badge">MODEL v1</span>
+          </div>
+          <div class="feedback-grid">
+            <article class="panel feedback-intro">
+              <span class="feedback-large-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="5"/></svg></span>
+              <div class="eyebrow">CLOSED-LOOP LEARNING</div>
+              <h2>From prediction<br>to real outcomes.</h2>
+              <p>In this demo, a recorded repayment result is added to the training set. The model refits against the synthetic portfolio and the decision studio uses the new model version.</p>
+              <div class="feedback-steps"><div><span>01</span><strong>Assess</strong><small>Explore a synthetic profile</small></div><i></i><div><span>02</span><strong>Observe</strong><small>Record an outcome</small></div><i></i><div><span>03</span><strong>Learn</strong><small>Retrain & compare</small></div></div>
+            </article>
+            <article class="panel feedback-form-panel">
+              <div class="panel-heading"><div><h2>Record an outcome</h2><p>For the current demo profile</p></div><span class="lock-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg> LOCAL DEMO</span></div>
+              <div id="feedback-no-profile" class="feedback-no-profile">Run an assessment first. Its synthetic cash-flow profile will be used here; no personal identifiers are collected.</div>
+              <form id="feedback-form">
+                <label class="field outcome-field"><span>Repayment outcome</span><select name="outcome" required><option value="on-time">Paid on time</option><option value="late">Paid late</option><option value="default">Default / unpaid</option></select></label>
+                <button class="button button-primary assess-button" type="submit" id="feedback-submit" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Save outcome & retrain</button>
+              </form>
+              <p class="feedback-success" id="feedback-success" role="status"></p>
+            </article>
+          </div>
+          <article class="panel training-panel">
+            <div class="panel-heading"><div><h2>Training activity</h2><p>Model updates recorded in this local demo</p></div><span class="feedback-count-chip"><span class="positive-dot"></span><span id="feedback-activity-count">0 outcomes</span></span></div>
+            <div class="activity-empty" id="feedback-activity"><span class="activity-check">✓</span><div><strong>Ready to learn</strong><p>Submit a repayment outcome above to create the first feedback event.</p></div></div>
+          </article>
+          <div class="callout-note"><strong>Responsible retraining:</strong> production systems need consented data, data-quality checks, drift monitoring, independent validation, and human governance before a model update can affect decisions. This prototype does not implement those controls.</div>
+        </section>
+
+        <section class="view-panel" id="view-fairness">
+          <div class="page-heading compact-heading">
+            <div><div class="eyebrow"><span class="eyebrow-line"></span> RESPONSIBLE AI</div><h1>Fairness is a practice.</h1><p class="page-subtitle">Monitor outcome parity, then investigate the context behind the numbers.</p></div>
+            <span class="audit-status"><span></span> AUDIT IN PROGRESS</span>
+          </div>
+          <div class="fairness-summary-grid">
+            <article class="stat-card"><div class="stat-top"><span>Largest approval gap</span><span class="stat-icon lavender"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M12 3v18"/></svg></span></div><div class="stat-value" id="fairness-gap">—</div><div class="stat-foot"><span class="stat-neutral">Across displayed gender cohorts</span></div></article>
+            <article class="stat-card"><div class="stat-top"><span>Parity ratio</span><span class="stat-icon mint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h6"/></svg></span></div><div class="stat-value" id="parity-ratio">—</div><div class="stat-foot"><span class="stat-neutral">Lowest ÷ highest approval rate</span></div></article>
+            <article class="stat-card"><div class="stat-top"><span>Audited applicants</span><span class="stat-icon peach"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 8v6M21 11h-6"/></svg></span></div><div class="stat-value" id="audited-count">—</div><div class="stat-foot"><span class="positive-dot"></span> Generated profiles only</div></article>
+          </div>
+          <article class="panel audit-panel">
+            <div class="panel-heading"><div><h2>Approval rates by cohort</h2><p>Outcome parity signals calculated on the same demo threshold</p></div><span class="select-static">Synthetic portfolio</span></div>
+            <div id="gender-audit" class="audit-groups"></div>
+            <div class="ratio-explainer"><strong>How to read this:</strong> the 80% ratio is a common screening heuristic, not a legal safe harbor or a definitive fairness test. Differences can be caused by data, policy, or sampling. This demo does not establish that any model is fair.</div>
+          </article>
+          <article class="panel audit-panel age-panel">
+            <div class="panel-heading"><div><h2>Age-band monitoring</h2><p>Exploratory breakdown for model-risk review</p></div><span class="info-pill">Supplementary</span></div>
+            <div id="age-audit" class="audit-groups"></div>
+          </article>
+          <div class="callout-note"><strong>Audit limitations:</strong> protected attributes are used only to group synthetic outcomes here and are excluded from model features. Group-level rates alone cannot test calibration, equal opportunity, intersectional disparities, or lawful use. Always consult qualified compliance and model-risk reviewers.</div>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

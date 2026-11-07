@@ -1,0 +1,13 @@
+{
+  "name": "explainable-credit-underwriting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Synthetic cash-flow underwriting with counterfactual guidance, repayment feedback, and fairness monitoring.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
